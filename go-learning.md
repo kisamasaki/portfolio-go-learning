@@ -24,6 +24,51 @@
 - appendを使用してスライスに要素を追加した際、元の配列が不要になる場合、ガベージコレクタがそれを検出してメモリを解放します。
 - スライスからサブスライスを切り出すときは注意する必要がある。親スライスもサブスライスも同じメモリ領域を共有し一方の変更はもう一方に影響を及ぼす。サブスライスを作ったらオリジナルのスライスもサブスライスも変更は避けた方が無難。appendでは複数のスライスがキャパシティを共有しないようフルスライス式を使う。
 - スライスマップは参照型
+- 確実にリソース解放を行う為にdeferを使用できるが、Close()といったエラーを返す可能性があるケースもある。無名関数を使用し、名前付きの返り値に代入すると呼び出し元に返すことが可能。
+```go
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+)
+
+func deferReturnSample(fname string) (err error) {
+	var f *os.File
+	f, err = os.Create(fname)
+	if err != nil {
+		return fmt.Errorf("ファイルオープンのエラー: %w", err)
+	}
+
+	// defer文内で即時エラーチェックと関数終了を行う無名関数を使用
+	defer func() {
+		closeErr := f.Close()
+		if closeErr != nil && err == nil {
+			// ファイルクローズのエラーが発生し、かつまだエラーが発生していない場合
+			err = fmt.Errorf("ファイルクローズのエラー: %w", closeErr)
+		}
+	}()
+
+	_, writeErr := io.WriteString(f, "deferのエラーを拾うサンプル")
+	if writeErr != nil {
+		// 書き込みエラーが発生した場合、即座に関数終了
+		return fmt.Errorf("ファイル書き込みエラー: %w", writeErr)
+	}
+
+	return nil
+}
+
+func main() {
+	err := deferReturnSample("example.txt")
+	if err != nil {
+		fmt.Println("エラーが発生しました:", err)
+		return
+	}
+
+	fmt.Println("ファイルの書き込みとクローズが正常に行われました.")
+}
+```
 
 # 『実用Go言語』
 - Goのアプリケーションとライブラリはそれぞれモジュールと呼ばれる塊になっており、1つのフォルダが1つのモジュール
