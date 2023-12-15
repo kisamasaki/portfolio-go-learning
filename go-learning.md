@@ -104,6 +104,114 @@ for i := range numbers {
 fmt.Println(numbers)  // 元のスライスが変更されている
 ```
 - ラベルを使用した場合、breakでは外側のforループが一気に終了し、continueを使用した場合、内側のforループがスキップされ、外側のforループの次の繰り返しに進む。
+- for-rangeで最初の2番目から最後の2番目まで処理したい場合は、continueやbreakを使用するよりも下記の方が短くて理解しやすい
+```go
+package main
+
+import "fmt"
+
+func main() {
+	evenVals := []int{2, 4, 6, 8, 10}
+	for i := 1; i < len(evenVals)-1; i++ {
+		fmt.Println(i, evenVals[i])
+	}
+}
+```
+- 名前付き戻り値はdeferで使用する。プログラムの説明になるという理由で好まれる場合もあるが、関数の外側でも変数が使われる場合に可読性が低下する。
+- 関数が値を返すならブランクreturnは絶対に使ってはならない。返される値が分かりにくくなるから。
+- Goにはカンマokイディオムがあり、下記実装で値と真偽値が返る。
+```go
+v, ok := m["hello"]
+```
+- "ダックタイピング" という用語は、「もしアヒルのように歩いて、鳴いて、アヒルのように見えるなら、それはアヒルだ」というアナロジーに由来している。具体的な型の名前よりも、その型の振る舞いが重要であるという考え方。型の名前に依存せず、代わりに振る舞いに焦点を当てるため、柔軟性がある
+```go
+package main
+
+import "fmt"
+
+// Quacker インターフェース
+type Quacker interface {
+	Quack()
+}
+
+// Duck 型
+type Duck struct{}
+
+// Duck 型が Quacker インターフェースを実装
+func (d Duck) Quack() {
+	fmt.Println("Quack!")
+}
+
+// Dog 型
+type Dog struct{}
+
+// Dog 型が Quacker インターフェースを実装
+func (d Dog) Quack() {
+	fmt.Println("Woof!")
+}
+
+func makeSomeNoise(q Quacker) {
+	q.Quack()
+}
+
+func main() {
+	duck := Duck{}
+	dog := Dog{}
+
+	makeSomeNoise(duck) // Duck 型は Quacker インターフェースを実装している
+	makeSomeNoise(dog)  // Dog 型も Quacker インターフェースを実装している
+}
+```
+- *を用いてそのポインタが参照するアドレスに保存されている値を返すことをデリファレンスと呼ぶ
+- nilポインタをデリファレンスしようとするとパニックにあるのでnilでないことを確認する必要がある。
+- 基本型のポイントが必要な場合はまず基本型の変数を宣言し、それから参照するポインタ変数を宣言する
+```go
+var y string
+z := &y
+```
+下記構造体のフィールドに直接代入は出来ないので、回避するには変数を作る必要がある。
+```go
+	type person struct {
+		FirstName  string
+		MiddleName *string
+		LastName   string
+	}
+	
+	p := person{
+		FirstName:  "Pat",
+		MiddleName: "Perry",  // ←コンパイル時のエラー
+		LastName:   "Peterson",
+	}
+```
+または下記ポインタ型を返却する関数を実装する。
+```go
+func stringp(s string) *string {
+    return &s
+}
+```
+- 定数（const）と型（type）はコンパイル時にのみ存在し、実行時にはメモリアドレスを持たない。これらはコンパイル時に解決され、実行時にはメモリ上に配置される必要が無い。
+```go
+const Pi = 3.14159
+```
+```go
+type MyInt int
+```
+- ポインタとしてnilを渡した場合、その値をnil以外に変えることは出来ない。
+- 関数にメモリのアドレスを渡した場合、そのアドレスを変えることは出来ない。
+- ファイルの読み取りでforを用いてバッファとしてスライスを使う場合、一度だけバッファとして使うスライスを作成するのではなく、都度新しいスライスを作成してしまうと、メモリの割り当てと解放が頻繁に発生し、非効率的な動作となる。
+- Go言語は下記のようなオーバーロードは許容されない
+```go
+// これはGoでは許容されない
+func add(a, b int) int {
+    return a + b
+}
+
+func add(a, b float64) float64 {
+    return a + b
+}
+```
+
+
 # 『実用Go言語』
 - Goのアプリケーションとライブラリはそれぞれモジュールと呼ばれる塊になっており、1つのフォルダが1つのモジュール
 - iotaの値はコンパイル時に決まる為、途中で新しく要素が挿入されると値が変わる
@@ -177,6 +285,85 @@ appendを使う場合はアロケーション(新しいメモリ領域の割り�
 - 構造体のフィールドに他のパッケージから参照するには先頭を大文字にする必要がある。
     - encoding/jsonにもこのルールが適用される為、JSONに小文字は適用されない
     - 関数の引数にstructのデータを渡すとコピーが行われるので、コピーのオーバーヘッドを避けるにはポインタを使用する
+- iotaを使用する際、一つのconstにまとめて記述を行うと初期値が連続するため、型ごとに宣言を別にする必要がある
+- 下記実装だと、出力する際には既にループが終了している可能性があるので意図通りの結果が得られない。
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fmt.Println(i)
+		}()
+	}
+
+	wg.Wait()
+}
+```
+これを修正するためには、各ゴルーチンが異なる i の値を参照できるよう実装する。
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			fmt.Println(i)
+		}(i)
+	}
+
+	wg.Wait()
+}
+```
+下記実装の場合、iの最終的な値を参照してしまう可能性がある。この問題を解決するには、iを引数として generateLargeValueに渡すことで、各ゴルーチンが異なるiの値を処理できるようにする。
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+func main() {
+	var wg sync.WaitGroup
+
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			largeValue := generateLargeValue(i) // 時間のかかる処理を含む関数
+			defer wg.Done()
+			fmt.Println(largeValue)
+		}()
+	}
+
+	wg.Wait()
+}
+
+func generateLargeValue(i int) int {
+	// 仮に時間のかかる処理を含む関数
+	time.Sleep(1 * time.Second)
+	return i
+}
+
+```
 
 # 『Go言語100Tips』
 
