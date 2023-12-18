@@ -400,8 +400,81 @@ func generateLargeValue(i int) int {
 	time.Sleep(1 * time.Second)
 	return i
 }
-
 ```
+下記実装ではゴルーチンが同時に n をインクリメントしており、競合状態が発生している。最終的なnの値: 168047と出力される。競合状態を避けるためには、ミューテックスを使用
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	n := 0
+
+	// ゴルーチン1: nをインクリメント
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100000; i++ {
+			n++
+		}
+	}()
+
+	// ゴルーチン2: nをインクリメント
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100000; i++ {
+			n++
+		}
+	}()
+
+	wg.Wait()
+
+	fmt.Println("最終的なnの値:", n)
+}
+```
+- go getコマンドはカレントディレクトリにあるgo.modを変更するがgo installはgo.modを変更しない
+- printやprintlnはデバッグ用の出力で標準出力にしたい場合はfmtパッケージを使用
+- ブランクimportはパッケージを明示的には使用しないがimportすることで機能を利用することを宣言する目的で使用。
+	- データベースドライバの登録で使用
+- Goで数値を文字列に変換するためにはstrconvパッケージを使用するがより簡単に行う方法としてfmtパッケージがある
+- Go言語はStringerインターフェースを定義しており、fmtパッケージの関数によって利用されている。
+```go
+type Stringer interface {
+    String() string
+}
+```
+カスタム型が String メソッドを実装している場合、fmt.Println がそのメソッドを呼び出して、カスタム型の文字列表現を取得する。これにより、カスタムな表示形式でオブジェクトを表示することが可能
+```go
+package main
+
+import "fmt"
+
+type Person struct {
+    Name string
+    Age  int
+}
+
+func (p Person) String() string {
+    return fmt.Sprintf("%s (%d years old)", p.Name, p.Age)
+}
+
+func main() {
+    person := Person{"John", 30}
+    fmt.Println(person)
+}
+```
+- Goのstructにタグというメタ情報を付与することで小文字のJSONも扱えるようになる
+- json.Unmarshal は、与えられた JSON データ全体をメモリに読み込み、その後構造体に変換する
+- json.NewDecoder と Decoder.Decode を使用すると、JSON データを逐次的に処理できる
+- timeパッケージのDurationという型は時刻ではなく型を保持できる
+- pathパッケージはURLなどの仮想的なパスを扱う場合に使う
+- path/filepathは物理的なパスを扱う場合に使う
+
 # 『Go言語100Tips』
 1. 意図しない変数シャドウイング
     1. ifブロックで省略変数宣言演算子(:=)を使って変数に代入を行っても外側の変数でnilのままになることがある
