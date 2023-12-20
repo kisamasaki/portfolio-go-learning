@@ -249,7 +249,77 @@ func main() {
 - go getコマンドを使用すると依存関係にあるモジュールのバージョンを変更できる
 - selectを使用することでデッドロックを回避することが出来る
 - for-selectループにdefaultがあるのは正しいプログラムではない可能性が高い。ループでいつもdefaultが実行されてしまい、forループが回ることがある。
+- 関数型に関数を代入するには、関数リテラルを使用して、変数に関数を代入することが一般的
+```go
+package main
 
+import "fmt"
+
+// 関数型の定義
+type MyFunction func(int) int
+
+// 関数1
+func addOne(x int) int {
+    return x + 1
+}
+
+func main() {
+    // 関数型の変数を宣言し、関数を代入
+    myFunc := MyFunction(addOne)
+
+    // 代入した関数を使用
+    result := myFunc(5)
+    fmt.Println(result) // 出力: 6
+}
+```
+- 下記実装で出力しても共にtrue表示される。これはgenErrがゼロ値として初期化されるため。解決するにはnilをreturnするかgenErrをerror型とする。
+```go
+package main
+
+import (
+	"fmt"
+)
+
+type Status int  //liststart1
+
+const (  // iotaについては「7.2.7 iotaと列挙型」参照
+	InvalidLogin Status = iota + 1  // 不正なログイン
+	NotFound  // 見つからない
+) //listend1
+
+type StatusErr struct {  //liststart2
+	Status  Status // 状態
+	Message string // メッセージ
+}
+
+func (se StatusErr) Error() string {
+	return se.Message
+} //listend2
+
+func GenerateError(flag bool) error { //liststart3
+	var genErr StatusErr
+	if flag {
+		genErr = StatusErr{
+			Status: NotFound,
+		}
+	}
+	return genErr
+}
+
+func main() {
+	err := GenerateError(true)
+	fmt.Println(err != nil)
+	err = GenerateError(false)
+	fmt.Println(err != nil)
+} //listend3
+```
+- errors.Unwrap は、Go言語の errors パッケージに含まれる関数で、エラーチェーンを構築したり、元のエラーを取り出すための機能を提供している。これを使うことで、複数のエラー情報を含むエラーチェーンを作成し、最終的なエラーから元のエラーまで順にたどることが可能。
+- 特定のインスタンス、特定の値を探しているときはerrors.Isを使う。
+- 特定の型を探しているときはerrors.Asを使う。
+- 関数内でそれぞれのエラーにて同一のメッセージを出力する際はdeferを使うことで簡潔に実装可能。
+	- この際戻り値には名前を付ける必要がある
+	- 一つの戻り値に名前を付けると全てに名前を付ける必要がある
+	- その場合、ほかの戻り値には「_」を指定する
 # 『実用Go言語』
 - Goのアプリケーションとライブラリはそれぞれモジュールと呼ばれる塊になっており、1つのフォルダが1つのモジュール
 - iotaの値はコンパイル時に決まる為、途中で新しく要素が挿入されると値が変わる
