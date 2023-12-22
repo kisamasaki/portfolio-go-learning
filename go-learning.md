@@ -320,6 +320,107 @@ func main() {
 	- この際戻り値には名前を付ける必要がある
 	- 一つの戻り値に名前を付けると全てに名前を付ける必要がある
 	- その場合、ほかの戻り値には「_」を指定する
+- mainループでbreakを使用して途中で抜けると、ゴルーチンが終了せずにゴルーチンリークが発生することがある
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func countTo(max int) <-chan int { //intのチャネルを戻す
+	ch := make(chan int)
+	go func() {  // 無名関数
+		for i := 0; i < max; i++ {
+			ch <- i // 0からmax-1までの値を順にchに入れる
+		}
+		close(ch)
+	}()
+
+	return ch // チャネルchを戻す
+}
+
+func main() { //liststart
+	for i := range countTo(10) { //countToからチャネルが戻り、0...9が代入される 
+		fmt.Print(i, " ")
+		if i > 5 {
+			break
+		}
+	}
+	fmt.Println()
+	doSomethingTakingLongTime() // 時間のかかる処理。この間、無名関数は待ち続けている
+} //listend
+
+func doSomethingTakingLongTime() {
+	time.Sleep(5*time.Second) // 何か処理をする	
+}
+```
+- ゴルーチンリークを防止するdoneチャネルパターンがあり、ゴルーチンに対して処理を終了するべき時であることを送る
+```go
+func searchData(s string, searchers []func(string) []string) []string {  
+	done := make(chan struct{}) // チャネルの型は空の構造体（3章参照）
+	resultChan := make(chan []string)
+	for _, searcher := range searchers {
+		// 以下をsearchersに含まれる各関数（searcher）について行う
+
+		// 無名関数をゴルーチンとして起動。引数は「文字列を受け取って、
+		// 文字列のスライスを返す関数」
+		go func(f func(string) []string) { 
+			select {
+			case resultChan <- f(s): // 関数の実行結果をresultChanに送る
+				fmt.Println("結果が戻ってきた")
+			case <-done:
+				fmt.Println("doneを選択")
+			}
+		}(searcher)  // 無名関数の引数。関数をひとつずつ渡す
+		
+	} // for の終わり
+	
+	r := <-resultChan // 結果が返ってきたら
+	close(done)   // チャネルdoneをクローズ
+	return r  // 文字列のスライス
+} //listend1
+```
+- 処理をキャンセルするためのキャンセレーション関数を戻すことでキャンセルすることも可能
+```go
+package main
+
+import "fmt"
+
+func countTo(max int) (<-chan int, func()) { //liststart
+	ch := make(chan int)
+	done := make(chan struct{})
+	cancelFunc := func() { // chをクローズする関数を戻す
+		close(done)
+	}
+
+	go func() {
+		for i := 0; i < max; i++ {
+			select {
+			case <-done:
+				return
+			case ch <- i:
+			}
+		}
+		close(ch)
+	}()
+	return ch, cancelFunc
+}
+
+func main() {
+ 	ch, cancelFunc := countTo(10)
+	for i := range ch {
+		if i >= 5 {  // 途中で抜けたくなったら（抜ける条件が整ったら）
+			break
+		}
+		fmt.Print(i, " ")		
+	}
+	fmt.Println()
+	cancelFunc() // chをクローズしてforループを終了する
+} //listend
+```
+
 # 『実用Go言語』
 - Goのアプリケーションとライブラリはそれぞれモジュールと呼ばれる塊になっており、1つのフォルダが1つのモジュール
 - iotaの値はコンパイル時に決まる為、途中で新しく要素が挿入されると値が変わる
