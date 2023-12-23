@@ -420,6 +420,26 @@ func main() {
 	cancelFunc() // chをクローズしてforループを終了する
 } //listend
 ```
+- クローズしたチャネルはcase文で条件がtrueになる。この為、チャネルの値をnilにすることでselectのcaseを無効化することが可能。
+```go
+package main
+
+import (
+	"fmt"
+)
+
+func main() {
+	ch := make(chan int)
+	close(ch) // チャネルをクローズする
+
+	select {
+	case v, ok := <-ch:
+		fmt.Println("読み取り結果:", v, ok) // クローズされたチャネルからの読み取り
+	default:
+		fmt.Println("デフォルトケースが選択されました")
+	}
+}
+```
 
 # 『実用Go言語』
 - Goのアプリケーションとライブラリはそれぞれモジュールと呼ばれる塊になっており、1つのフォルダが1つのモジュール
