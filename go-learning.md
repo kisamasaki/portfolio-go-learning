@@ -440,6 +440,27 @@ func main() {
 	}
 }
 ```
+- タイムアウトについてはtime.After関数を使用する
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	// 例: 5秒のタイムアウト
+	timeout := 5 * time.Second
+
+	// タイムアウトを待つ
+	select {
+	case <-time.After(timeout):
+		fmt.Println("タイムアウト発生")
+		// タイムアウト時の処理を記述
+	}
+}
+```
 
 # 『実用Go言語』
 - Goのアプリケーションとライブラリはそれぞれモジュールと呼ばれる塊になっており、1つのフォルダが1つのモジュール
