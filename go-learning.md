@@ -525,7 +525,28 @@ fmt.Println("Current offset:", offset)
 - time.Durationは、時間の長さや経過時間を表すための型
 - time.Timeは、特定の瞬間を表すための型。時刻、日付、およびタイムゾーン情報を含む。
 - 一度に複数のJSON構造体を読み書きする場合はjson.Marshalとjson.Unmarshalではなく、json.Decoderとjson.Encoderを使用する
+- 下記child コンテキストは parent コンテキストが2秒でキャンセルされた時点で終了する。child コンテキストは parent コンテキストを基にしており、親がキャンセルされると子も自動的にキャンセルされるから。
+```go
+package main
 
+import (
+	"context"
+	"fmt"
+	"time"
+)
+
+func main() { //liststart 
+	ctx := context.Background()
+	parent, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	child, cancel2 := context.WithTimeout(parent, 3*time.Second)
+	defer cancel2()
+	start := time.Now()
+	<-child.Done()
+	end := time.Now()
+	fmt.Println(end.Sub(start))
+} //listend
+```
 
 # 『実用Go言語』
 ## 1章 「Go」らしさに触れる
@@ -1139,6 +1160,11 @@ message Person {
 ```
 - service キーワード:
 	- メソッドを定義する。メソッドにはリクエスト型とレスポンス型を指定する
+# 『Go言語で構築するクリーンアーキテクチャ設計』
+- UUID (Universally Unique Identifier)
+	- 通常、32桁の16進数で表現され、8-4-4-4-12の5つのグループに分かれている。例: 550e8400-e29b-41d4-a716-446655440000
+- ULID (Universally Unique Lexicographically(辞書学的に) Sortable Identifier)
+	- タイムスタンプを含むため、生成された順にソート可能。これは、一意性とソート可能性の両方が重要な場面で利点。
 
 # その他
 - Javaの publicや package-private に似た２つのアクセスレベルがGoには存在する。トップレベルで宣言された 2変数や関数の名前が大文字で始まる場合は public 、小文字で始まる場合は package-private のアクセスレベルになる。
@@ -1269,3 +1295,49 @@ Mon, 02 Jan 2006 15:04:05 -0700
 - time.RFC3339は、Go言語のtimeパッケージにおいて、RFC 3339形式のタイムスタンプ（日付と時刻の文字列表現）を表すためのフォーマット定数。このフォーマットは、ISO 8601形式を基にしており、時差情報も含まれている
 2006-01-02T15:04:05Z07:00
 - クロージャは関数内部から外の関数内ローカル変数への読み書きができる
+- strings.NewReader は、与えられた文字列から io.Reader インターフェースを実装する *strings.Reader 型の新しい Reader を作成する。この Reader は内部的に読み取り位置を保持しており、Read メソッドが呼ばれるとその位置からデータを読み取る。次に Read が呼ばれると、読み取り位置が進んで次のデータを返す。
+```go
+package main
+
+import (
+	"fmt"
+	"io"
+	"strings"
+)
+
+func main() {
+	data := "Hello, World!"
+	reader := strings.NewReader(data)
+
+	// 1回目の読み込み
+	buf1 := make([]byte, 5)
+	reader.Read(buf1)
+	fmt.Println(string(buf1))  // 出力: "Hello"
+
+	// 2回目の読み込み
+	buf2 := make([]byte, 5)
+	reader.Read(buf2)
+	fmt.Println(string(buf2))  // 出力: ", Wor"
+}
+```
+- Goのジェネリクスにおいて、anyの代わりにcomparableという制約を使用することがある。comparableは、比較可能な型を指定するための制約。比較可能な型とは、等価性や順序付けの操作が可能な型。下記例では、MyGenericFunctionはcomparable型であるTを引数に取り、==演算子を使用して比較している。Tがcomparableであるため、この関数は様々な比較可能な型に対して使用できる。comparableを使用することで、特定の型に対する比較操作ができるようになり、より型安全で柔軟なジェネリックなコードを書くことができる。
+```go
+package main
+
+import "fmt"
+
+// MyGenericFunction は比較可能な型 T を引数に取るジェネリックな関数です
+func MyGenericFunction[T comparable](a, b T) bool {
+    return a == b
+}
+
+func main() {
+    // int型の比較
+    resultInt := MyGenericFunction(42, 42)
+    fmt.Println("Int result:", resultInt) // true
+
+    // string型の比較
+    resultString := MyGenericFunction("hello", "world")
+    fmt.Println("String result:", resultString) // false
+}
+```
