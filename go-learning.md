@@ -1155,7 +1155,11 @@ func f(ctx context.Context) error {
 - 並行操作を行っているがその操作は状態を全く進めていないプログラムをライブロックという。
 - 並行プロセスが仕事をするのに必要なリソースを取得できない状況をリソース枯渇という。不必要にロックを行うと効率的に仕事ができない
 - RWMutex（アールダブリューミューテックス）は、Goプログラミング言語で提供される並列処理を制御するためのミューテックス（Mutex）の一種。"RW"は"Read"（読み取り）と"Write"（書き込み）を表し、RWMutexは同時に複数のゴルーチンが読み取り操作を行うことを可能にし、書き込み操作が行われている際には排他的なアクセスを提供する。これにより、読み取り操作と書き込み操作の両方を安全に管理できる。読み取りロックを取得すると、他のゴルーチンも同時に読み取りロックを取得できる。これにより、同時に複数のゴルーチンがリソースを読み取ることができる。書き込みロックを取得すると、他のゴルーチンは読み取りも書き込みもできなくなる。一度に1つのゴルーチンだけがリソースにアクセスできる。
-
+# 『Go言語で構築するクリーンアーキテクチャ設計』
+- UUID (Universally Unique Identifier)
+	- 通常、32桁の16進数で表現され、8-4-4-4-12の5つのグループに分かれている。例: 550e8400-e29b-41d4-a716-446655440000
+- ULID (Universally Unique Lexicographically(辞書学的に) Sortable Identifier)
+	- タイムスタンプを含むため、生成された順にソート可能。これは、一意性とソート可能性の両方が重要な場面で利点。
 # 『Go言語による分散サービス』
 - オフセット
 	- 位置を基準点からの距離で表した値
@@ -1187,11 +1191,6 @@ message Person {
 ```
 - service キーワード:
 	- メソッドを定義する。メソッドにはリクエスト型とレスポンス型を指定する
-# 『Go言語で構築するクリーンアーキテクチャ設計』
-- UUID (Universally Unique Identifier)
-	- 通常、32桁の16進数で表現され、8-4-4-4-12の5つのグループに分かれている。例: 550e8400-e29b-41d4-a716-446655440000
-- ULID (Universally Unique Lexicographically(辞書学的に) Sortable Identifier)
-	- タイムスタンプを含むため、生成された順にソート可能。これは、一意性とソート可能性の両方が重要な場面で利点。
 # 『gRPC [Golang] Master Class: Build Modern API & Microservices』
 - 例としてJSONとプロトコルバッファで同じ定義を行うとそれぞれ52バイトと17バイトになるため、メッセージ送信時、帯域幅やストレージスペースを大幅に節約できる
 - JSONは人が手動で編集しやすく、可読性があるが、テキスト形式であるためCPUによる負荷が大きい。
@@ -1208,8 +1207,105 @@ message Person {
 - gRPCはデータのストリーミング(リアルタイムで要件がある場合に便利)をサポートするが、RESTはリクエスト/レスポンスのみをサポート
 - プロトコルバッファはJSONと比較して型があるためより制限的になる。
 - gRPCはRESTと比較してGET、POST、UPDATE、DELETE等の動詞によって制限されることは無い
+- 生成されるサーバーのインターフェース名は`<サービス名>Server`となる
+```protobuf
+service HogeService {
+  rpc SomeMethod(SomeRequest) returns (SomeResponse);
+}
+```
+上記の場合、生成されるサーバーのインターフェース名は HogeServiceServer になる。生成されたGoのファイルにおいて、hoge.pb.go ファイル内には下記形でサーバーのインターフェースが生成される。つまり、Protocol Buffersのサービス定義名に基づいて、生成されるサーバーのインターフェース名が自動的に決定される。
+```go
+// SomeRequest, SomeResponseなどのメッセージ定義などが含まれる
 
-
+// HogeServiceServer is the server API for HogeService service.
+type HogeServiceServer interface {
+    SomeMethod(context.Context, *SomeRequest) (*SomeResponse, error)
+}
+```
+- `grpc.NewServer()`は、gRPCサーバーを作成するための関数
+- gRPCサーバーを起動するためには、TCPやUnixドメインソケットなどのネットワークリスナーを作成する必要がある。通常、TCPを使用する
+```go
+lis, err := net.Listen("tcp", ":50051")
+if err != nil {
+    log.Fatalf("failed to listen: %v", err)
+}
+```
+`grpc.NewServer()` を呼び出して、gRPCサーバーを作成する
+```go
+grpcServer := grpc.NewServer()
+```
+`grpcServer.Serve()`を呼び出して、サーバーを起動する。この関数はブロックし、クライアントからのリクエストを受け付ける
+```go
+if err := grpcServer.Serve(lis); err != nil {
+    log.Fatalf("failed to serve: %v", err)
+}
+```
+- `grpc.Dial` は、gRPCサーバーへのクライアント接続を確立するための関数。
+	- grpc.Dial を呼び出して gRPC サーバーへの接続を確立する前に、サーバーのアドレスを指定する必要がある。通常、IPアドレスとポート番号を使用して指定。
+	- 下記では、`localhost:50051` のサーバーに対して接続を確立しようとしている。また、`grpc.WithInsecure()` オプションを使用して、セキュアでない（TLSを使用しない）接続を許可している。開発用途でのみ使用し、本番環境では適切なセキュリティ対策を行う必要がある。
+```go
+conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+if err != nil {
+    log.Fatalf("failed to dial: %v", err)
+}
+defer conn.Close()
+```
+- `grpc.WithInsecure()` オプションは、gRPCクライアントがTLS（Transport Layer Security）を使用せず、セキュアな通信を行わないことを指定。これは、開発中やローカル環境など、セキュリティがあまり重要でない環境で使用される。
+- クライアントがセキュアでない接続を要求した場合、サーバーはこの要求に従い、TLS証明書の検証を行わずに通信を受け入れます。
+- gRPCはデフォルトで安全なSSLが使用される。つまり、クライアントが適切なTLS証明書を提供しない限り、サーバーに接続することができない。
+- TLS（Transport Layer Security）とSSL（Secure Sockets Layer）
+	- TLSとSSLは両方とも暗号化通信を提供するためのプロトコルだが、歴史的な経緯やバージョンの違いがある
+	- SSLは、初期の暗号化通信プロトコルの1つであり、1990年代後半から使用されてきた。その後、TLSがSSLの後継として開発され、より堅牢でセキュアな通信を実現した。
+	- TLSはSSLの改良版であり、よりセキュアで信頼性の高い通信を提供
+- connをクローズしないとどうなるのか？
+	- conn が開いたままということは、クライアントとサーバー間の接続が残っている状態。この状態では、クライアントがサーバーにリクエストを送信することができ、サーバーからのレスポンスを受け取ることができる
+	- conn を明示的にクローズしない限り、この接続はリソースを消費し続ける。そのため、プログラムを終了しない限り、この接続が閉じられることはない。その結果、プログラムが長時間実行される場合や、大量のリクエストを処理する場合など、接続が蓄積され、システムのリソースが枯渇する可能性がある
+- `pb.RegisterYourServiceServer()`メソッド
+	- gRPCサーバーに特定のサービスの実装を登録するためのメソッド
+	- メソッドの命名規則は、Protocol Buffersのサービス定義に基づいている
+		- Register
+			- この部分は、サービスのインタフェースをgRPCサーバーに登録するための操作を示す
+		- YourService
+			- Protocol Buffersで定義されたサービスの名前を表す。通常、サービス定義ファイル（.protoファイル）に記述されたサービス名がそのまま使用される
+		- Server
+			- この部分は、サーバー側の実装を示す。通常、サービス名に "Server" を付け加えたものが使用される
+	- 引数は2つある
+		- `s (*grpc.Server)`
+			- gRPCサーバーを指定。これは、サービスの実装を登録する対象のgRPCサーバー
+		- `srv YourServiceServer`
+			- サービスの実装を表す構造体を指定。この構造体は、Protocol Buffersで定義されたサービスのインタフェースに基づくメソッドを実装する
+- Protocol Buffersで定義したフィールド名と、Goコードでのアクセスについて
+	- Protocol Buffersでは、フィールド名はスネークケースで定義されるのが一般的
+```protobuf
+message YourMessage {
+    string your_field_name = 1;
+}
+```
+- Protocol Buffersで定義されたスネークケースのフィールド名は、Goのコードではキャメルケースに変換される。また、各単語の先頭文字は大文字になる。フィールド名はGoの慣習に従って変換されるため、Protocol Buffersで定義されたスネークケースのフィールド名と異なる場合がある
+- `NewYourServiceClient(conn)`メソッド
+	- Protocol Buffersで定義されたサービスに対応するクライアントを生成
+	- メソッドの命名規則
+		- New
+			- NewはGo言語で新しいオブジェクトを作成するための慣習的なプレフィックス。この命名規則は、新しいインスタンスを生成するためのファクトリ関数を示す
+		- YourService
+			- YourServiceはProtocol Buffersで定義されたサービス名に対応している。Protocol Buffersでは、サービス名は大文字で始まるキャメルケースで記述される。Go言語の慣習に従って、この部分もキャメルケースで表現されます。
+		- Client
+			- Clientは生成されたgRPCクライアントの型を示す。この命名規則は、Protocol Buffersのサービス名に対応するクライアント型を表現します。通常、サービス名に "Service" を付け加えた名前になる
+	- 引数
+		- conn はgRPCサーバーに接続するためのコネクションを表す。このコネクションは、gRPCサーバーのアドレスや認証情報などが含まれている。通常TCP接続やUNIXソケットなどのトランスポートを使用する
+- ストリームでデータを送るには`stream.Send`を使う
+- `stream.Recv()`メソッド
+	- "Recv" は "Receive" の略語で、データを受信することを意味する。
+	- `stream.Recv()`はストリームからデータを受信する操作を行うメソッド
+	- `stream.Recv()`メソッドが`io.EOF`エラーを返した場合、これはストリームが終了したことを示す。そのため、ループから抜け出し、ストリームの処理を終了する
+- `stream.CloseAndRecv()`メソッド
+	- クライアントがストリームを閉じ、サーバーから最後のデータを受信するためのメソッド
+	- `stream.CloseAndRecv()`メソッドが呼ばれると、クライアント側のストリームが閉じられる。これにより、サーバー側はストリームの終了を検知する
+	- ストリームが閉じられると、サーバー側は最後のデータをクライアントに送信する。`stream.CloseAndRecv()`メソッドは、この最後のデータを受信するために使用される
+	- サーバーから受信した最後のデータが返される。通常、このデータはサーバーのレスポンスになる
+# Evans
+- gRPCサービスとのやり取りを簡素化し、CLI上でインタラクティブに操作できるツール
+- RESTful APIのテストやデバッグに特化しているGUIベースのPostmanに対してEvansはgRPCサービスとの対話的な通信を行うためのCLIツール。
 # その他
 - Javaの publicや package-private に似た２つのアクセスレベルがGoには存在する。トップレベルで宣言された 2変数や関数の名前が大文字で始まる場合は public 、小文字で始まる場合は package-private のアクセスレベルになる。
 - constは変数と異なり、使われない場合でもコンパイルエラーにならない。
