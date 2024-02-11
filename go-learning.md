@@ -1303,6 +1303,20 @@ message YourMessage {
 	- `stream.CloseAndRecv()`メソッドが呼ばれると、クライアント側のストリームが閉じられる。これにより、サーバー側はストリームの終了を検知する
 	- ストリームが閉じられると、サーバー側は最後のデータをクライアントに送信する。`stream.CloseAndRecv()`メソッドは、この最後のデータを受信するために使用される
 	- サーバーから受信した最後のデータが返される。通常、このデータはサーバーのレスポンスになる
+- `stream.SendAndClose()`メソッド
+	- ストリームを閉じたい場合に使用
+- `status.FromError()`関数
+	- 一般的なエラーを gRPC のステータスエラーに変換するためのメソッド
+	- この関数は、エラーが gRPC のステータスエラーであるかどうかを検査し、そうであれば`status.Status`オブジェクトと`true`を返す。そうでない場合は`nil`と`false`を返す。
+```go
+s, ok := status.FromError(err)
+if ok {
+    // エラーは gRPC のステータスエラーです
+    // s は status.Status オブジェクトです
+} else {
+    // エラーは gRPC のステータスエラーではありません
+}
+```
 # Evans
 - gRPCサービスとのやり取りを簡素化し、CLI上でインタラクティブに操作できるツール
 - RESTful APIのテストやデバッグに特化しているGUIベースのPostmanに対してEvansはgRPCサービスとの対話的な通信を行うためのCLIツール。
